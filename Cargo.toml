@@ -1,0 +1,7 @@
+[package]
+name = "racoon"
+version = "0.1.0"
+authors = ["Albert Cervin <albert@acervin.com>"]
+edition = "2018"
+
+[dependencies]
