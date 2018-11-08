@@ -1,3 +1,5 @@
-# Racoon
+[![Build Status](https://travis-ci.com/abbec/raccoon.svg?branch=master)](https://travis-ci.com/abbec/raccoon)
 
-is a IRC notifier for Gitlab HTTP hooks.
+# Raccoon
+
+is an IRC notifier for Gitlab HTTP hooks.
