@@ -22,18 +22,27 @@ fn router() -> Router {
 fn handle_gitlab(mut state: State) -> Box<HandlerFuture> {
     let f = Body::take_from(&mut state).concat2().then(|b| match b {
         Ok(vb) => {
-            let c: serde_json::Value = serde_json::from_slice(&vb).unwrap();
+            match serde_json::from_slice(&vb) {
+                Ok(json) => {
+                    // determine kind and format message
+                    let json: serde_json::Value = json;
+                    let msg = gitlab::dispatch(
+                        json["object_kind"].as_str().unwrap_or("bogus").to_owned(),
+                        json,
+                    );
 
-            // determine kind and format message
-            let msg = gitlab::dispatch(c["object_kind"].as_str().unwrap_or("bogus").to_owned(), c);
-
-            // send message to irc
-            if let Some(m) = msg {
-                println!("{}", m);
+                    // send message to irc
+                    // TODO: maybe we should handle invalid cases here?
+                    if let Some(m) = msg {
+                        println!("{}", m);
+                    }
+                }
+                Err(e) => return Err((state, e.into_handler_error())),
             }
 
             // return value is only used to signal that we
-            // received the thing
+            // received the thing, so just send OK in case
+            // we got down here 🦆
             let resp = create_empty_response(&state, StatusCode::OK);
             Ok((state, resp))
         }
@@ -43,7 +52,6 @@ fn handle_gitlab(mut state: State) -> Box<HandlerFuture> {
     Box::new(f)
 }
 
-/// Start a server and use a `Router` to dispatch requests
 pub fn main() {
     let addr = "127.0.0.1:7878";
     println!("Listening for requests at http://{}", addr);
@@ -58,13 +66,29 @@ mod tests {
     use mime;
 
     #[test]
-    fn gitlab() {
+    fn gitlab_push() {
         let test_server = TestServer::new(router()).unwrap();
         let response = test_server
             .client()
             .post(
                 "http://localhost/gitlab/",
                 include_str!("../test/push.json"),
+                mime::APPLICATION_JSON,
+            )
+            .perform()
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn gitlab_push_tag() {
+        let test_server = TestServer::new(router()).unwrap();
+        let response = test_server
+            .client()
+            .post(
+                "http://localhost/gitlab/",
+                include_str!("../test/push_tag.json"),
                 mime::APPLICATION_JSON,
             )
             .perform()
