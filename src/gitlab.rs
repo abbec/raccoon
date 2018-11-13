@@ -6,6 +6,7 @@ pub fn dispatch<S: AsRef<str>>(kind: S, data: Value) -> Option<String> {
     match kind.as_ref() {
         "push" => Some(handle_push(data).to_string()),
         "tag_push" => Some(handle_tag_push(data).to_string()),
+        "issue" => Some(handle_issue(data).to_string()),
         _ => None, // unknown event
     }
 }
@@ -24,6 +25,26 @@ struct TagPushEvent {
     #[serde(rename = "ref")]
     tag_ref: String,
     repository: Repository,
+}
+
+#[derive(Deserialize)]
+struct IssueEvent {
+    user: User,
+    #[serde(rename = "object_attributes")]
+    issue: Issue,
+    repository: Repository,
+}
+
+#[derive(Deserialize)]
+struct User {
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct Issue {
+    title: String,
+    url: String,
+    action: String,
 }
 
 #[derive(Deserialize)]
@@ -59,6 +80,32 @@ impl fmt::Display for TagPushEvent {
     }
 }
 
+impl fmt::Display for IssueEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "🐛 {} {} on {}",
+            self.user, self.issue, self.repository
+        )
+    }
+}
+
+impl fmt::Display for User {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+impl fmt::Display for Issue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}ed issue \"{}\" ({})",
+            self.action, self.title, self.url
+        )
+    }
+}
+
 impl fmt::Display for Repository {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} ({})", self.name, self.homepage)
@@ -70,6 +117,10 @@ fn handle_push(data: Value) -> PushEvent {
 }
 
 fn handle_tag_push(data: Value) -> TagPushEvent {
+    serde_json::from_value(data).unwrap()
+}
+
+fn handle_issue(data: Value) -> IssueEvent {
     serde_json::from_value(data).unwrap()
 }
 
@@ -100,5 +151,16 @@ mod tests {
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("pushed tag \"v1.0.0\""));
+    }
+
+    #[test]
+    fn issue() {
+        let tp = "issue";
+        let d = serde_json::from_reader(File::open("test/issue.json").expect("find file")).unwrap();
+
+        let s = dispatch(tp, d);
+        assert!(s.is_some());
+        let s = s.unwrap();
+        assert!(s.contains("opened issue"));
     }
 }
