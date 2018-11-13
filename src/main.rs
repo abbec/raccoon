@@ -176,4 +176,20 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
     }
+
+    #[test]
+    fn gitlab_merge_request() {
+        let test_server = TestServer::new(router()).unwrap();
+        let response = test_server
+            .client()
+            .post(
+                "http://localhost/gitlab/",
+                include_str!("../test/merge_request.json"),
+                mime::APPLICATION_JSON,
+            )
+            .perform()
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 }

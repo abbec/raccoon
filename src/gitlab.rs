@@ -8,6 +8,7 @@ pub fn dispatch<S: AsRef<str>>(kind: S, data: Value) -> Option<String> {
         "tag_push" => Some(handle_tag_push(data).to_string()),
         "issue" => Some(handle_issue(data).to_string()),
         "note" => Some(handle_comment(data).to_string()),
+        "merge_request" => Some(handle_merge_request(data).to_string()),
         _ => None, // unknown event
     }
 }
@@ -39,9 +40,16 @@ struct IssueEvent {
 #[derive(Deserialize)]
 struct CommentEvent {
     user: User,
-    repository: Repository,
     #[serde(rename = "object_attributes")]
     comment: Comment,
+}
+
+#[derive(Deserialize)]
+struct MergeRequestEvent {
+    user: User,
+    #[serde(rename = "object_attributes")]
+    merge_request: MergeRequest,
+    repository: Repository,
 }
 
 #[derive(Deserialize)]
@@ -67,6 +75,13 @@ struct Comment {
     noteable_type: String,
     url: String,
     note: String,
+}
+
+#[derive(Deserialize)]
+struct MergeRequest {
+    title: String,
+    action: String,
+    url: String,
 }
 
 impl fmt::Display for PushEvent {
@@ -106,6 +121,16 @@ impl fmt::Display for IssueEvent {
     }
 }
 
+impl fmt::Display for MergeRequestEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "🚓 {} {} on {}",
+            self.user, self.merge_request, self.repository
+        )
+    }
+}
+
 impl fmt::Display for CommentEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "💬 {} {}", self.user, self.comment)
@@ -123,6 +148,16 @@ impl fmt::Display for Issue {
         write!(
             f,
             "{}ed issue \"{}\" ({})",
+            self.action, self.title, self.url
+        )
+    }
+}
+
+impl fmt::Display for MergeRequest {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}ed merge request \"{}\" ({})",
             self.action, self.title, self.url
         )
     }
@@ -168,6 +203,10 @@ fn handle_issue(data: Value) -> IssueEvent {
 }
 
 fn handle_comment(data: Value) -> CommentEvent {
+    serde_json::from_value(data).unwrap()
+}
+
+fn handle_merge_request(data: Value) -> MergeRequestEvent {
     serde_json::from_value(data).unwrap()
 }
 
@@ -263,5 +302,18 @@ mod tests {
         assert!(s.contains("commented on"));
         assert!(s.contains("snippet"));
         assert!(s.ends_with("..."));
+    }
+
+    #[test]
+    fn merge_request() {
+        let tp = "merge_request";
+        let d = serde_json::from_reader(File::open("test/merge_request.json").expect("find file"))
+            .unwrap();
+
+        let s = dispatch(tp, d);
+        assert!(s.is_some());
+        let s = s.unwrap();
+
+        assert!(s.contains("opened merge request"));
     }
 }
