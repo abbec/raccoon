@@ -9,6 +9,7 @@ pub fn dispatch<S: AsRef<str>>(kind: S, data: Value) -> Option<String> {
         "issue" => Some(handle_issue(data).to_string()),
         "note" => Some(handle_comment(data).to_string()),
         "merge_request" => Some(handle_merge_request(data).to_string()),
+        "wiki_page" => Some(handle_wiki_page(data).to_string()),
         _ => None, // unknown event
     }
 }
@@ -53,6 +54,13 @@ struct MergeRequestEvent {
 }
 
 #[derive(Deserialize)]
+struct WikiEvent {
+    user: User,
+    #[serde(rename = "object_attributes")]
+    wiki_edit: WikiEditEvent,
+}
+
+#[derive(Deserialize)]
 struct User {
     name: String,
 }
@@ -79,6 +87,13 @@ struct Comment {
 
 #[derive(Deserialize)]
 struct MergeRequest {
+    title: String,
+    action: String,
+    url: String,
+}
+
+#[derive(Deserialize)]
+struct WikiEditEvent {
     title: String,
     action: String,
     url: String,
@@ -131,6 +146,12 @@ impl fmt::Display for MergeRequestEvent {
     }
 }
 
+impl fmt::Display for WikiEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "📰 {} {}", self.user, self.wiki_edit)
+    }
+}
+
 impl fmt::Display for CommentEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "💬 {} {}", self.user, self.comment)
@@ -166,6 +187,21 @@ impl fmt::Display for MergeRequest {
 impl fmt::Display for Repository {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} ({})", self.name, self.homepage)
+    }
+}
+
+impl fmt::Display for WikiEditEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let ending = if self.action.ends_with("e") {
+            "d"
+        } else {
+            "ed"
+        };
+        write!(
+            f,
+            "{}{} wiki page \"{}\" ({})",
+            self.action, ending, self.title, self.url
+        )
     }
 }
 
@@ -207,6 +243,10 @@ fn handle_comment(data: Value) -> CommentEvent {
 }
 
 fn handle_merge_request(data: Value) -> MergeRequestEvent {
+    serde_json::from_value(data).unwrap()
+}
+
+fn handle_wiki_page(data: Value) -> WikiEvent {
     serde_json::from_value(data).unwrap()
 }
 
@@ -315,5 +355,17 @@ mod tests {
         let s = s.unwrap();
 
         assert!(s.contains("opened merge request"));
+    }
+
+    #[test]
+    fn wiki_page() {
+        let tp = "wiki_page";
+        let d = serde_json::from_reader(File::open("test/wiki.json").expect("find file")).unwrap();
+
+        let s = dispatch(tp, d);
+        assert!(s.is_some());
+        let s = s.unwrap();
+
+        assert!(s.contains("created wiki page"));
     }
 }

@@ -192,4 +192,20 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
     }
+
+    #[test]
+    fn gitlab_wiki() {
+        let test_server = TestServer::new(router()).unwrap();
+        let response = test_server
+            .client()
+            .post(
+                "http://localhost/gitlab/",
+                include_str!("../test/wiki.json"),
+                mime::APPLICATION_JSON,
+            )
+            .perform()
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 }
