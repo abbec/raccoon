@@ -410,7 +410,7 @@ mod tests {
         let s = s.unwrap();
         assert!(s.contains("commented on"));
         assert!(s.contains("snippet"));
-        assert!(s.ends_with("..."));
+        assert!(s.ends_with("supposed..."));
     }
 
     #[test]
