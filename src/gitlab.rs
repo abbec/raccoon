@@ -10,6 +10,7 @@ pub fn dispatch<S: AsRef<str>>(kind: S, data: Value) -> Option<String> {
         "note" => Some(handle_comment(data).to_string()),
         "merge_request" => Some(handle_merge_request(data).to_string()),
         "wiki_page" => Some(handle_wiki_page(data).to_string()),
+        "pipeline" => Some(handle_pipeline(data).to_string()),
         _ => None, // unknown event
     }
 }
@@ -61,6 +62,14 @@ struct WikiEvent {
 }
 
 #[derive(Deserialize)]
+struct PipelineEvent {
+    commit: Commit,
+    #[serde(rename = "object_attributes")]
+    pipeline: Pipeline,
+    project: Project,
+}
+
+#[derive(Deserialize)]
 struct User {
     name: String,
 }
@@ -97,6 +106,26 @@ struct WikiEditEvent {
     title: String,
     action: String,
     url: String,
+}
+
+#[derive(Deserialize)]
+struct Commit {
+    id: String,
+    message: String,
+    url: String,
+}
+
+#[derive(Deserialize)]
+struct Pipeline {
+    status: String,
+    #[serde(default)]
+    duration: usize,
+}
+
+#[derive(Deserialize)]
+struct Project {
+    name: String,
+    web_url: String,
 }
 
 impl fmt::Display for PushEvent {
@@ -158,9 +187,28 @@ impl fmt::Display for CommentEvent {
     }
 }
 
+impl fmt::Display for PipelineEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "👷 {} on {} for {}",
+            self.pipeline, self.commit, self.project
+        )
+    }
+}
+
 impl fmt::Display for User {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+impl fmt::Display for Commit {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let first_line = self.message.split('\n').nth(0).unwrap_or("<invalid>");
+        let mut shortid = self.id.clone();
+        shortid.truncate(7);
+        write!(f, "{}: {} ({})", shortid, first_line, self.url)
     }
 }
 
@@ -187,6 +235,23 @@ impl fmt::Display for MergeRequest {
 impl fmt::Display for Repository {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} ({})", self.name, self.homepage)
+    }
+}
+
+impl fmt::Display for Project {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} ({})", self.name, self.web_url)
+    }
+}
+
+impl fmt::Display for Pipeline {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let duration = if self.duration > 0 {
+            format!(" in {} seconds", self.duration)
+        } else {
+            String::new()
+        };
+        write!(f, "Pipeline {}{}", self.status, duration)
     }
 }
 
@@ -247,6 +312,10 @@ fn handle_merge_request(data: Value) -> MergeRequestEvent {
 }
 
 fn handle_wiki_page(data: Value) -> WikiEvent {
+    serde_json::from_value(data).unwrap()
+}
+
+fn handle_pipeline(data: Value) -> PipelineEvent {
     serde_json::from_value(data).unwrap()
 }
 
@@ -367,5 +436,18 @@ mod tests {
         let s = s.unwrap();
 
         assert!(s.contains("created wiki page"));
+    }
+
+    #[test]
+    fn pipeline() {
+        let tp = "pipeline";
+        let d =
+            serde_json::from_reader(File::open("test/pipeline.json").expect("find file")).unwrap();
+
+        let s = dispatch(tp, d);
+        assert!(s.is_some());
+        let s = s.unwrap();
+
+        assert!(s.contains("Pipeline success"));
     }
 }

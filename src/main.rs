@@ -208,4 +208,20 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
     }
+
+    #[test]
+    fn gitlab_pipeline() {
+        let test_server = TestServer::new(router()).unwrap();
+        let response = test_server
+            .client()
+            .post(
+                "http://localhost/gitlab/",
+                include_str!("../test/pipeline.json"),
+                mime::APPLICATION_JSON,
+            )
+            .perform()
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 }
