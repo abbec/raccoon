@@ -11,6 +11,7 @@ pub fn dispatch<S: AsRef<str>>(kind: S, data: Value) -> Option<String> {
         "merge_request" => Some(handle_merge_request(data).to_string()),
         "wiki_page" => Some(handle_wiki_page(data).to_string()),
         "pipeline" => Some(handle_pipeline(data).to_string()),
+        "build" => Some(handle_build(data).to_string()),
         _ => None, // unknown event
     }
 }
@@ -63,10 +64,19 @@ struct WikiEvent {
 
 #[derive(Deserialize)]
 struct PipelineEvent {
-    commit: Commit,
+    commit: Commit<String>,
     #[serde(rename = "object_attributes")]
     pipeline: Pipeline,
     project: Project,
+}
+
+#[derive(Deserialize)]
+struct BuildEvent {
+    commit: Commit<u32>,
+    build_name: String,
+    build_stage: String,
+    build_status: String,
+    repository: Repository,
 }
 
 #[derive(Deserialize)]
@@ -109,9 +119,12 @@ struct WikiEditEvent {
 }
 
 #[derive(Deserialize)]
-struct Commit {
-    id: String,
+struct Commit<T> {
+    id: T,
+    #[serde(default)]
+    sha: String,
     message: String,
+    #[serde(default)]
     url: String,
 }
 
@@ -197,18 +210,37 @@ impl fmt::Display for PipelineEvent {
     }
 }
 
+impl fmt::Display for BuildEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "🚛 Build {} ({}) {} on {} for {}",
+            self.build_name, self.build_stage, self.build_status, self.commit, self.repository
+        )
+    }
+}
+
 impl fmt::Display for User {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
     }
 }
 
-impl fmt::Display for Commit {
+impl fmt::Display for Commit<String> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let first_line = self.message.split('\n').nth(0).unwrap_or("<invalid>");
         let mut shortid = self.id.clone();
         shortid.truncate(7);
         write!(f, "{}: {} ({})", shortid, first_line, self.url)
+    }
+}
+
+impl fmt::Display for Commit<u32> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let first_line = self.message.split('\n').nth(0).unwrap_or("<invalid>");
+        let mut shortid = self.sha.clone();
+        shortid.truncate(7);
+        write!(f, "{}: {}", shortid, first_line)
     }
 }
 
@@ -316,6 +348,10 @@ fn handle_wiki_page(data: Value) -> WikiEvent {
 }
 
 fn handle_pipeline(data: Value) -> PipelineEvent {
+    serde_json::from_value(data).unwrap()
+}
+
+fn handle_build(data: Value) -> BuildEvent {
     serde_json::from_value(data).unwrap()
 }
 
@@ -449,5 +485,18 @@ mod tests {
         let s = s.unwrap();
 
         assert!(s.contains("Pipeline success"));
+    }
+
+    #[test]
+    fn build() {
+        let tp = "build";
+        let d = serde_json::from_reader(File::open("test/build.json").expect("find file")).unwrap();
+
+        let s = dispatch(tp, d);
+        assert!(s.is_some());
+        let s = s.unwrap();
+
+        assert!(s.contains("Build"));
+        assert!(s.contains("created"));
     }
 }
