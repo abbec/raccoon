@@ -5,35 +5,35 @@ use std::fmt;
 pub fn dispatch<S: AsRef<str>>(kind: S, data: Value, logger: slog::Logger) -> Option<String> {
     match kind.as_ref() {
         "push" => {
-            let res: Result<PushEvent, SerdeError> = parse(data);
+            let res: Result<PushEvent, SerdeError> = serde_json::from_value(data);
             to_string(res, logger)
         }
         "tag_push" => {
-            let res: Result<TagPushEvent, SerdeError> = parse(data);
+            let res: Result<TagPushEvent, SerdeError> = serde_json::from_value(data);
             to_string(res, logger)
         }
         "issue" => {
-            let res: Result<IssueEvent, SerdeError> = parse(data);
+            let res: Result<IssueEvent, SerdeError> = serde_json::from_value(data);
             to_string(res, logger)
         }
         "note" => {
-            let res: Result<CommentEvent, SerdeError> = parse(data);
+            let res: Result<CommentEvent, SerdeError> = serde_json::from_value(data);
             to_string(res, logger)
         }
         "merge_request" => {
-            let res: Result<MergeRequestEvent, SerdeError> = parse(data);
+            let res: Result<MergeRequestEvent, SerdeError> = serde_json::from_value(data);
             to_string(res, logger)
         }
         "wiki_page" => {
-            let res: Result<WikiEvent, SerdeError> = parse(data);
+            let res: Result<WikiEvent, SerdeError> = serde_json::from_value(data);
             to_string(res, logger)
         }
         "pipeline" => {
-            let res: Result<PipelineEvent, SerdeError> = parse(data);
+            let res: Result<PipelineEvent, SerdeError> = serde_json::from_value(data);
             to_string(res, logger)
         }
         "build" => {
-            let res: Result<BuildEvent, SerdeError> = parse(data);
+            let res: Result<BuildEvent, SerdeError> = serde_json::from_value(data);
             to_string(res, logger)
         }
         _ => {
@@ -41,13 +41,6 @@ pub fn dispatch<S: AsRef<str>>(kind: S, data: Value, logger: slog::Logger) -> Op
             None
         }
     }
-}
-
-fn parse<T>(data: Value) -> Result<T, SerdeError>
-where
-    for<'a> T: serde::Deserialize<'a>,
-{
-    serde_json::from_value(data)
 }
 
 fn to_string<T: fmt::Display>(res: Result<T, SerdeError>, logger: slog::Logger) -> Option<String> {
