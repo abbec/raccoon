@@ -1,18 +1,62 @@
-use serde_json::Value;
+use serde_json::{error::Error as SerdeError, Value};
 
 use std::fmt;
 
-pub fn dispatch<S: AsRef<str>>(kind: S, data: Value) -> Option<String> {
+pub fn dispatch<S: AsRef<str>>(kind: S, data: Value, logger: slog::Logger) -> Option<String> {
     match kind.as_ref() {
-        "push" => Some(handle_push(data).to_string()),
-        "tag_push" => Some(handle_tag_push(data).to_string()),
-        "issue" => Some(handle_issue(data).to_string()),
-        "note" => Some(handle_comment(data).to_string()),
-        "merge_request" => Some(handle_merge_request(data).to_string()),
-        "wiki_page" => Some(handle_wiki_page(data).to_string()),
-        "pipeline" => Some(handle_pipeline(data).to_string()),
-        "build" => Some(handle_build(data).to_string()),
-        _ => None, // unknown event
+        "push" => {
+            let res: Result<PushEvent, SerdeError> = parse(data);
+            to_string(res, logger)
+        }
+        "tag_push" => {
+            let res: Result<TagPushEvent, SerdeError> = parse(data);
+            to_string(res, logger)
+        }
+        "issue" => {
+            let res: Result<IssueEvent, SerdeError> = parse(data);
+            to_string(res, logger)
+        }
+        "note" => {
+            let res: Result<CommentEvent, SerdeError> = parse(data);
+            to_string(res, logger)
+        }
+        "merge_request" => {
+            let res: Result<MergeRequestEvent, SerdeError> = parse(data);
+            to_string(res, logger)
+        }
+        "wiki_page" => {
+            let res: Result<WikiEvent, SerdeError> = parse(data);
+            to_string(res, logger)
+        }
+        "pipeline" => {
+            let res: Result<PipelineEvent, SerdeError> = parse(data);
+            to_string(res, logger)
+        }
+        "build" => {
+            let res: Result<BuildEvent, SerdeError> = parse(data);
+            to_string(res, logger)
+        }
+        _ => {
+            warn!(logger, "unknown event type");
+            None
+        }
+    }
+}
+
+fn parse<T>(data: Value) -> Result<T, SerdeError>
+where
+    for<'a> T: serde::Deserialize<'a>,
+{
+    serde_json::from_value(data)
+}
+
+fn to_string<T: fmt::Display>(res: Result<T, SerdeError>, logger: slog::Logger) -> Option<String> {
+    match res {
+        Ok(pe) => Some(pe.to_string()),
+        Err(e) => {
+            error!(logger, "{}", e);
+            None
+        }
     }
 }
 
@@ -323,38 +367,6 @@ impl fmt::Display for Comment {
     }
 }
 
-fn handle_push(data: Value) -> PushEvent {
-    serde_json::from_value(data).unwrap()
-}
-
-fn handle_tag_push(data: Value) -> TagPushEvent {
-    serde_json::from_value(data).unwrap()
-}
-
-fn handle_issue(data: Value) -> IssueEvent {
-    serde_json::from_value(data).unwrap()
-}
-
-fn handle_comment(data: Value) -> CommentEvent {
-    serde_json::from_value(data).unwrap()
-}
-
-fn handle_merge_request(data: Value) -> MergeRequestEvent {
-    serde_json::from_value(data).unwrap()
-}
-
-fn handle_wiki_page(data: Value) -> WikiEvent {
-    serde_json::from_value(data).unwrap()
-}
-
-fn handle_pipeline(data: Value) -> PipelineEvent {
-    serde_json::from_value(data).unwrap()
-}
-
-fn handle_build(data: Value) -> BuildEvent {
-    serde_json::from_value(data).unwrap()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -365,7 +377,7 @@ mod tests {
         let tp = "push";
         let d = serde_json::from_reader(File::open("test/push.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d);
+        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("pushed"));
@@ -378,7 +390,7 @@ mod tests {
         let d =
             serde_json::from_reader(File::open("test/push_tag.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d);
+        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("pushed tag \"v1.0.0\""));
@@ -389,7 +401,7 @@ mod tests {
         let tp = "issue";
         let d = serde_json::from_reader(File::open("test/issue.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d);
+        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("opened issue"));
@@ -401,7 +413,7 @@ mod tests {
         let d = serde_json::from_reader(File::open("test/comment_commit.json").expect("find file"))
             .unwrap();
 
-        let s = dispatch(tp, d);
+        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("commented on"));
@@ -414,7 +426,7 @@ mod tests {
         let d = serde_json::from_reader(File::open("test/comment_mr.json").expect("find file"))
             .unwrap();
 
-        let s = dispatch(tp, d);
+        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("commented on"));
@@ -427,7 +439,7 @@ mod tests {
         let d = serde_json::from_reader(File::open("test/comment_issue.json").expect("find file"))
             .unwrap();
 
-        let s = dispatch(tp, d);
+        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("commented on"));
@@ -441,7 +453,7 @@ mod tests {
             serde_json::from_reader(File::open("test/comment_snippet.json").expect("find file"))
                 .unwrap();
 
-        let s = dispatch(tp, d);
+        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("commented on"));
@@ -455,7 +467,7 @@ mod tests {
         let d = serde_json::from_reader(File::open("test/merge_request.json").expect("find file"))
             .unwrap();
 
-        let s = dispatch(tp, d);
+        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
 
@@ -467,7 +479,7 @@ mod tests {
         let tp = "wiki_page";
         let d = serde_json::from_reader(File::open("test/wiki.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d);
+        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
 
@@ -480,7 +492,7 @@ mod tests {
         let d =
             serde_json::from_reader(File::open("test/pipeline.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d);
+        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
 
@@ -492,7 +504,7 @@ mod tests {
         let tp = "build";
         let d = serde_json::from_reader(File::open("test/build.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d);
+        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
 
