@@ -17,22 +17,23 @@ use hyper::{Body, HeaderMap, StatusCode};
 
 use futures::{future::Future, stream::Stream};
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use slog::Drain;
 
 mod gitlab;
+mod irc;
 
 #[derive(Clone, StateData)]
 struct AppState {
     logger: Arc<slog::Logger>,
-    cfg: Arc<Mutex<config::Config>>,
+    cfg: Arc<RwLock<config::Config>>,
 }
 
 fn router(logger: slog::Logger, cfg: config::Config) -> Router {
     let state = AppState {
         logger: Arc::new(logger),
-        cfg: Arc::new(Mutex::new(cfg)),
+        cfg: Arc::new(RwLock::new(cfg)),
     };
 
     let middleware = StateMiddleware::new(state);
@@ -53,7 +54,7 @@ fn compare_gitlab_token(headers: &HeaderMap, app_state: &AppState) -> Result<(),
     match headers.get("X-Gitlab-Token") {
         Some(gl_token) => {
             let token: String = {
-                let cfg = app_state.cfg.lock().unwrap();
+                let cfg = app_state.cfg.read().unwrap();
                 cfg.get("gitlab_token")
                     .map_err(|e| format!("no gitlab_token in cfg: {}", e))?
             };
@@ -128,6 +129,19 @@ pub fn main() -> Result<(), String> {
 
     info!(log, "reading raccoon config file");
     let mut cfg = config::Config::default();
+    match xdg::BaseDirectories::with_prefix("raccoon") {
+        Ok(xdg_dirs) => {
+            if let Some(f) = xdg_dirs.find_config_file("raccoon.toml") {
+                info!(log, "using config file from {}", f.display());
+                cfg.merge(config::File::with_name(
+                    f.to_str().unwrap_or("invalid-string"),
+                ))
+                .map_err(|e| format!("failed to parse cfg at {}: {}", f.display(), e))?;
+            }
+        }
+        Err(e) => warn!(log, "failed to get XDG directories: {}", e),
+    };
+
     cfg.merge(config::File::with_name("./raccoon"))
         .map_err(|e| {
             error!(log, "failed to read config: {}", e);
@@ -139,6 +153,8 @@ pub fn main() -> Result<(), String> {
             error!(log, "failed to read environment settings: {}", e);
             e.to_string()
         })?;
+
+    irc::init(&cfg)?;
 
     let addr = "127.0.0.1:7878";
     info!(log, "Listening for requests at http://{}", addr);
