@@ -12,6 +12,28 @@ struct IrcConfig {
     channels: Vec<String>,
 }
 
+pub struct RealIrcWriter {
+    client: client::IrcClient,
+}
+
+impl RealIrcWriter {
+    pub fn new(client: client::IrcClient) -> Self {
+        RealIrcWriter { client: client }
+    }
+}
+
+pub trait IrcWriter {
+    fn write(&mut self, message: &str) -> Result<(), String>;
+}
+
+impl IrcWriter for RealIrcWriter {
+    fn write(&mut self, message: &str) -> Result<(), String> {
+        self.client
+            .send(message)
+            .map_err(|e| format!("failed to send IRC message: {}", e))
+    }
+}
+
 impl From<IrcConfig> for client::data::config::Config {
     fn from(cfg: IrcConfig) -> Self {
         let (chans, keys) = split_channel_keys(cfg.channels);
@@ -40,7 +62,8 @@ fn split_channel_keys(channels: Vec<String>) -> (Vec<String>, HashMap<String, St
                 let mut parts = c.split(':');
                 parts
                     .nth(0)
-                    .and_then(|chan| match parts.nth(1) {
+                    // the iterator does not rewind so need to use 0 again
+                    .and_then(|chan| match parts.nth(0) {
                         Some(k) => Some((chan, k)),
                         None => None,
                     })
@@ -64,4 +87,26 @@ pub fn init(config: &config::Config) -> Result<client::IrcClient, String> {
         .map_err(|e| format!("failed to identify: {}", e))?;
 
     Ok(client)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_split_channel_keys() {
+        let chans = vec![
+            String::from("#testchannel:password"),
+            String::from("#nopasschannel"),
+            String::from("#another-channel"),
+        ];
+
+        let (channels, keys) = split_channel_keys(chans);
+
+        assert_eq!(channels.len(), 3);
+        assert_eq!(keys.len(), 1);
+
+        assert!(keys.contains_key("#testchannel"));
+        assert_eq!(keys["#testchannel"], "password");
+    }
 }

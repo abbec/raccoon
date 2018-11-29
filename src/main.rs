@@ -17,7 +17,7 @@ use hyper::{Body, HeaderMap, StatusCode};
 
 use futures::{future::Future, stream::Stream};
 
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use slog::Drain;
 
@@ -28,12 +28,14 @@ mod irc;
 struct AppState {
     logger: Arc<slog::Logger>,
     cfg: Arc<RwLock<config::Config>>,
+    irc: Arc<Mutex<Box<irc::IrcWriter + Send>>>,
 }
 
-fn router(logger: slog::Logger, cfg: config::Config) -> Router {
+fn router(logger: slog::Logger, cfg: config::Config, irc: Box<irc::IrcWriter + Send>) -> Router {
     let state = AppState {
         logger: Arc::new(logger),
         cfg: Arc::new(RwLock::new(cfg)),
+        irc: Arc::new(Mutex::new(irc)),
     };
 
     let middleware = StateMiddleware::new(state);
@@ -100,6 +102,9 @@ fn handle_gitlab(mut state: State) -> Box<HandlerFuture> {
                     // send message to irc
                     if let Some(m) = msg {
                         debug!(log, "{}", m);
+                        if let Err(e) = app_state.irc.lock().unwrap().write(&m) {
+                            error!(log, "failed to post message to IRC: {}", e);
+                        }
                     } else {
                         let resp = create_empty_response(&state, StatusCode::BAD_REQUEST);
                         return Ok((state, resp));
@@ -154,11 +159,11 @@ pub fn main() -> Result<(), String> {
             e.to_string()
         })?;
 
-    irc::init(&cfg)?;
+    let writer = irc::RealIrcWriter::new(irc::init(&cfg)?);
 
     let addr = "127.0.0.1:7878";
     info!(log, "Listening for requests at http://{}", addr);
-    Ok(gotham::start(addr, router(log, cfg)))
+    Ok(gotham::start(addr, router(log, cfg, Box::new(writer))))
 }
 
 #[cfg(test)]
@@ -176,11 +181,38 @@ mod tests {
         }};
     }
 
+    #[derive(Clone)]
+    pub struct FakeIrcWriter {
+        pub buffer: Arc<RwLock<String>>,
+    }
+
+    impl FakeIrcWriter {
+        pub fn new() -> Self {
+            FakeIrcWriter {
+                buffer: Arc::new(RwLock::new(String::new())),
+            }
+        }
+
+        pub fn contains(&self, sub: &str) -> bool {
+            let s = self.buffer.read().unwrap();
+            s.contains(sub)
+        }
+    }
+
+    impl irc::IrcWriter for FakeIrcWriter {
+        fn write(&mut self, message: &str) -> Result<(), String> {
+            let mut b = self.buffer.write().unwrap();
+            b.push_str(message);
+            Ok(())
+        }
+    }
+
     #[test]
     fn gitlab_invalid_token() {
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(FakeIrcWriter::new()),
         ))
         .unwrap();
         let response = test_server
@@ -198,9 +230,11 @@ mod tests {
 
     #[test]
     fn gitlab_push() {
+        let irc = FakeIrcWriter::new();
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(irc.clone()),
         ))
         .unwrap();
         let response = test_server
@@ -214,14 +248,17 @@ mod tests {
             .perform()
             .unwrap();
 
+        assert!(irc.contains("pushed"));
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]
     fn gitlab_push_tag() {
+        let irc = FakeIrcWriter::new();
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(irc.clone()),
         ))
         .unwrap();
         let response = test_server
@@ -235,14 +272,17 @@ mod tests {
             .perform()
             .unwrap();
 
+        assert!(irc.contains("pushed tag"));
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]
     fn gitlab_issue() {
+        let irc = FakeIrcWriter::new();
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(irc.clone()),
         ))
         .unwrap();
         let response = test_server
@@ -256,14 +296,17 @@ mod tests {
             .perform()
             .unwrap();
 
+        assert!(irc.contains("opened issue"));
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]
     fn gitlab_commit_comment() {
+        let irc = FakeIrcWriter::new();
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(irc.clone()),
         ))
         .unwrap();
         let response = test_server
@@ -277,14 +320,18 @@ mod tests {
             .perform()
             .unwrap();
 
+        assert!(irc.contains("commented on"));
+        assert!(irc.contains("commit"));
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]
     fn gitlab_mr_comment() {
+        let irc = FakeIrcWriter::new();
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(irc.clone()),
         ))
         .unwrap();
         let response = test_server
@@ -298,14 +345,18 @@ mod tests {
             .perform()
             .unwrap();
 
+        assert!(irc.contains("commented on"));
+        assert!(irc.contains("mergerequest"));
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]
     fn gitlab_issue_comment() {
+        let irc = FakeIrcWriter::new();
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(irc.clone()),
         ))
         .unwrap();
         let response = test_server
@@ -319,14 +370,18 @@ mod tests {
             .perform()
             .unwrap();
 
+        assert!(irc.contains("commented on"));
+        assert!(irc.contains("issue"));
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]
     fn gitlab_snippet_comment() {
+        let irc = FakeIrcWriter::new();
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(irc.clone()),
         ))
         .unwrap();
         let response = test_server
@@ -340,14 +395,18 @@ mod tests {
             .perform()
             .unwrap();
 
+        assert!(irc.contains("commented on"));
+        assert!(irc.contains("snippet"));
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]
     fn gitlab_merge_request() {
+        let irc = FakeIrcWriter::new();
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(irc.clone()),
         ))
         .unwrap();
         let response = test_server
@@ -361,14 +420,17 @@ mod tests {
             .perform()
             .unwrap();
 
+        assert!(irc.contains("opened merge request"));
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]
     fn gitlab_wiki() {
+        let irc = FakeIrcWriter::new();
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(irc.clone()),
         ))
         .unwrap();
         let response = test_server
@@ -382,14 +444,17 @@ mod tests {
             .perform()
             .unwrap();
 
+        assert!(irc.contains("created wiki page"));
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]
     fn gitlab_pipeline() {
+        let irc = FakeIrcWriter::new();
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(irc.clone()),
         ))
         .unwrap();
         let response = test_server
@@ -403,14 +468,17 @@ mod tests {
             .perform()
             .unwrap();
 
+        assert!(irc.contains("Pipeline success"));
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]
     fn gitlab_build() {
+        let irc = FakeIrcWriter::new();
         let test_server = TestServer::new(router(
             slog::Logger::root(slog::Discard, o!()),
             test_settings!(),
+            Box::new(irc.clone()),
         ))
         .unwrap();
         let response = test_server
@@ -424,6 +492,8 @@ mod tests {
             .perform()
             .unwrap();
 
+        assert!(irc.contains("Build"));
+        assert!(irc.contains("created"));
         assert_eq!(response.status(), StatusCode::OK);
     }
 }
