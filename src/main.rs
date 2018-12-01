@@ -57,8 +57,8 @@ fn compare_gitlab_token(headers: &HeaderMap, app_state: &AppState) -> Result<(),
         Some(gl_token) => {
             let token: String = {
                 let cfg = app_state.cfg.read().unwrap();
-                cfg.get("gitlab_token")
-                    .map_err(|e| format!("no gitlab_token in cfg: {}", e))?
+                cfg.get("gitlab.token")
+                    .map_err(|e| format!("no gitlab.token in cfg: {}", e))?
             };
 
             if &token == gl_token {
@@ -147,6 +147,7 @@ pub fn main() -> Result<(), String> {
         Err(e) => warn!(log, "failed to get XDG directories: {}", e),
     };
 
+    info!(log, "using config file in current directory");
     cfg.merge(config::File::with_name("./raccoon"))
         .map_err(|e| {
             error!(log, "failed to read config: {}", e);
@@ -159,7 +160,8 @@ pub fn main() -> Result<(), String> {
             e.to_string()
         })?;
 
-    let writer = irc::RealIrcWriter::new(irc::init(&cfg)?);
+    info!(log, "connecting to IRC");
+    let writer = irc::RealIrcWriter::new(irc::init(&cfg, &log)?);
 
     let addr = "127.0.0.1:7878";
     info!(log, "Listening for requests at http://{}", addr);
@@ -176,7 +178,7 @@ mod tests {
     macro_rules! test_settings {
         () => {{
             let mut cfg = config::Config::default();
-            cfg.set("gitlab_token", "TEST_TOKEN").unwrap();
+            cfg.set("gitlab.token", "TEST_TOKEN").unwrap();
             cfg
         }};
     }

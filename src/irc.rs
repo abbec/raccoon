@@ -1,9 +1,9 @@
 use irc::client::{self, ext::ClientExt};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::mpsc, thread};
 
 pub use irc::client::Client;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct IrcConfig {
     nickname: String,
     nick_password: String,
@@ -73,20 +73,39 @@ fn split_channel_keys(channels: Vec<String>) -> (Vec<String>, HashMap<String, St
     )
 }
 
-pub fn init(config: &config::Config) -> Result<client::IrcClient, String> {
+pub fn init(config: &config::Config, logger: &slog::Logger) -> Result<client::IrcClient, String> {
+    let (tx, rx) = mpsc::channel();
+    let log = logger.new(o!());
+
     let parsed: IrcConfig = config
         .get("irc")
         .map_err(|e| format!("failed to parse irc config: {}", e))?;
 
-    let mut reactor = client::reactor::IrcReactor::new().unwrap();
-    let client = reactor
-        .prepare_client_and_connect(&parsed.into())
-        .map_err(|e| format!("failed to connect to IRC: {}", e))?;
-    client
-        .identify()
-        .map_err(|e| format!("failed to identify: {}", e))?;
+    thread::spawn(move || -> Result<(), String> {
+        let mut reactor = client::reactor::IrcReactor::new()
+            .map_err(|e| format!("failed to create IRC reactor: {}", e))?;
+        let client = reactor
+            .prepare_client_and_connect(&parsed.into())
+            .map_err(|e| format!("failed to connect IRC client: {}", e))?;
+        tx.send(client.clone()).unwrap();
 
-    Ok(client)
+        client
+            .identify()
+            .map_err(|e| format!("failed to identify: {}", e))?;
+
+        reactor.register_client_with_handler(client.clone(), |_, _| Ok(()));
+
+        info!(log, "starting IRC event loop");
+        reactor
+            .run()
+            .map_err(|e| format!("failed to start IRC event loop: {}", e))?;
+
+        Ok(())
+    });
+
+    Ok(rx
+        .recv()
+        .map_err(|e| format!("failed to recieve irc client: {}", e))?)
 }
 
 #[cfg(test)]
