@@ -30,9 +30,9 @@ Currently, Raccoon only supports IRC servers with SSL enabled.
 
 Config files are read from (in order)
 
-- `$XDG_CONFIG_HOME/raccoon/racooon.toml`
-- `$XDG_CONFIG_DIRS/racooon/racooon.toml` (usually `/etc/xdg/raccoon/raccoon.toml`)
-- `./racooon.toml`
+- `$XDG_CONFIG_HOME/raccoon/raccoon.toml`
+- `$XDG_CONFIG_DIRS/raccooon/raccoon.toml` (usually `/etc/xdg/raccoon/raccoon.toml`)
+- `./raccoon.toml`
 
 # Developing
 
