@@ -50,7 +50,7 @@ channels = ["#channel1", "#channel_with_key:the_key"]
 ```
 Currently, Raccoon only supports IRC servers with SSL enabled.
 
-HOMEPAGE
+# HOMEPAGE
 
 https://github.com/abbec/raccoon
 
