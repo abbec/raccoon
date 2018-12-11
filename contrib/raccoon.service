@@ -1,0 +1,8 @@
+[Unit]
+Description=Raccoon accepts Gitlab Webhooks and posts to IRC
+
+[Service]
+ExecStart=/usr/local/bin/raccoon
+
+[Install]
+WantedBy=multi-user.target
