@@ -17,9 +17,14 @@ use hyper::{Body, HeaderMap, StatusCode};
 
 use futures::{future::Future, stream::Stream};
 
-use std::sync::{Arc, Mutex, RwLock};
+use std::{
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, RwLock},
+};
 
 use slog::Drain;
+
+use structopt::StructOpt;
 
 mod gitlab;
 mod irc;
@@ -125,6 +130,18 @@ fn handle_gitlab(mut state: State) -> Box<HandlerFuture> {
     Box::new(f)
 }
 
+#[derive(StructOpt, Debug)]
+/// Raccoon is a service that accepts Gitlab HTTP hooks as described at
+/// https://docs.gitlab.com/ee/user/project/integrations/webhooks.html
+/// and sends the resulting formatted text to IRC.
+struct Opt {
+    #[structopt(parse(from_os_str), short = "c", long = "config")]
+    /// Config file to use. This overrides the standard config
+    /// file resolution. See man page for config file format and
+    /// resolution order if this parameter is not specified.
+    config: Option<PathBuf>,
+}
+
 pub fn main() -> Result<(), String> {
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
@@ -132,27 +149,50 @@ pub fn main() -> Result<(), String> {
 
     let log = slog::Logger::root(drain, o!());
 
-    info!(log, "reading raccoon config file");
+    let opt = Opt::from_args();
+
     let mut cfg = config::Config::default();
-    match xdg::BaseDirectories::with_prefix("raccoon") {
-        Ok(xdg_dirs) => {
-            if let Some(f) = xdg_dirs.find_config_file("raccoon.toml") {
-                info!(log, "using config file from {}", f.display());
-                cfg.merge(config::File::with_name(
-                    f.to_str().unwrap_or("invalid-string"),
-                ))
-                .map_err(|e| format!("failed to parse cfg at {}: {}", f.display(), e))?;
+    match opt.config {
+        Some(c) => {
+            info!(
+                log,
+                "reading raccoon config file {} as specified on the command line",
+                c.display()
+            );
+
+            cfg.merge(config::File::with_name(
+                c.to_str().unwrap_or("<invalid-string>"),
+            ))
+            .map_err(|e| {
+                error!(log, "failed to read config: {}", e);
+                e.to_string()
+            })?;
+        }
+        None => {
+            info!(log, "reading raccoon config file");
+            match xdg::BaseDirectories::with_prefix("raccoon") {
+                Ok(xdg_dirs) => {
+                    if let Some(f) = xdg_dirs.find_config_file("raccoon.toml") {
+                        info!(log, "using config file from {}", f.display());
+                        cfg.merge(config::File::with_name(
+                            f.to_str().unwrap_or("invalid-string"),
+                        ))
+                        .map_err(|e| format!("failed to parse cfg at {}: {}", f.display(), e))?;
+                    }
+                }
+                Err(e) => warn!(log, "failed to get XDG directories: {}", e),
+            };
+
+            if Path::new("./raccoon").exists() {
+                info!(log, "using config file in current directory");
+                cfg.merge(config::File::with_name("./raccoon"))
+                    .map_err(|e| {
+                        error!(log, "failed to read config: {}", e);
+                        e.to_string()
+                    })?;
             }
         }
-        Err(e) => warn!(log, "failed to get XDG directories: {}", e),
-    };
-
-    info!(log, "using config file in current directory");
-    cfg.merge(config::File::with_name("./raccoon"))
-        .map_err(|e| {
-            error!(log, "failed to read config: {}", e);
-            e.to_string()
-        })?;
+    }
 
     cfg.merge(config::Environment::with_prefix("RACCOON"))
         .map_err(|e| {
