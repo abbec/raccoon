@@ -36,6 +36,8 @@ Config files are read from (in order)
 
 # Developing
 
-- Install Rust: [](https://rustup.rs)
+- Install Rust: https://rustup.rs
 - Build the code with `cargo build`
 - Run tests with `cargo test`
+- Check lints with `cargo clippy`
+- Check format with `cargo fmt -- --check` or let rustfmt format the code with `cargo fmt`
