@@ -2,39 +2,39 @@ use serde_json::{error::Error as SerdeError, Value};
 
 use std::fmt;
 
-pub fn dispatch<S: AsRef<str>>(kind: S, data: Value, logger: slog::Logger) -> Option<String> {
+pub fn dispatch<S: AsRef<str>>(kind: S, data: Value, logger: &slog::Logger) -> Option<String> {
     match kind.as_ref() {
         "push" => {
             let res: Result<PushEvent, SerdeError> = serde_json::from_value(data);
-            to_string(res, logger)
+            to_string(res, &logger)
         }
         "tag_push" => {
             let res: Result<TagPushEvent, SerdeError> = serde_json::from_value(data);
-            to_string(res, logger)
+            to_string(res, &logger)
         }
         "issue" => {
             let res: Result<IssueEvent, SerdeError> = serde_json::from_value(data);
-            to_string(res, logger)
+            to_string(res, &logger)
         }
         "note" => {
             let res: Result<CommentEvent, SerdeError> = serde_json::from_value(data);
-            to_string(res, logger)
+            to_string(res, &logger)
         }
         "merge_request" => {
             let res: Result<MergeRequestEvent, SerdeError> = serde_json::from_value(data);
-            to_string(res, logger)
+            to_string(res, &logger)
         }
         "wiki_page" => {
             let res: Result<WikiEvent, SerdeError> = serde_json::from_value(data);
-            to_string(res, logger)
+            to_string(res, &logger)
         }
         "pipeline" => {
             let res: Result<PipelineEvent, SerdeError> = serde_json::from_value(data);
-            to_string(res, logger)
+            to_string(res, &logger)
         }
         "build" => {
             let res: Result<BuildEvent, SerdeError> = serde_json::from_value(data);
-            to_string(res, logger)
+            to_string(res, &logger)
         }
         _ => {
             warn!(logger, "unknown event type");
@@ -43,7 +43,7 @@ pub fn dispatch<S: AsRef<str>>(kind: S, data: Value, logger: slog::Logger) -> Op
     }
 }
 
-fn to_string<T: fmt::Display>(res: Result<T, SerdeError>, logger: slog::Logger) -> Option<String> {
+fn to_string<T: fmt::Display>(res: Result<T, SerdeError>, logger: &slog::Logger) -> Option<String> {
     match res {
         Ok(pe) => Some(pe.to_string()),
         Err(e) => {
@@ -326,7 +326,7 @@ impl fmt::Display for Pipeline {
 
 impl fmt::Display for WikiEditEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let ending = if self.action.ends_with("e") {
+        let ending = if self.action.ends_with('e') {
             "d"
         } else {
             "ed"

@@ -18,7 +18,7 @@ pub struct RealIrcWriter {
 
 impl RealIrcWriter {
     pub fn new(client: client::IrcClient) -> Self {
-        RealIrcWriter { client: client }
+        RealIrcWriter { client }
     }
 }
 
@@ -36,7 +36,7 @@ impl IrcWriter for RealIrcWriter {
 
 impl From<IrcConfig> for client::data::config::Config {
     fn from(cfg: IrcConfig) -> Self {
-        let (chans, keys) = split_channel_keys(cfg.channels);
+        let (chans, keys) = split_channel_keys(&cfg.channels);
         client::data::config::Config {
             nickname: Some(cfg.nickname),
             nick_password: Some(cfg.nick_password),
@@ -50,7 +50,7 @@ impl From<IrcConfig> for client::data::config::Config {
     }
 }
 
-fn split_channel_keys(channels: Vec<String>) -> (Vec<String>, HashMap<String, String>) {
+fn split_channel_keys(channels: &[String]) -> (Vec<String>, HashMap<String, String>) {
     (
         channels
             .iter()

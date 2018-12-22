@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
@@ -101,7 +103,7 @@ fn handle_gitlab(mut state: State) -> Box<HandlerFuture> {
                     let msg = gitlab::dispatch(
                         &object_kind,
                         json,
-                        log.new(o!("object_kind" => object_kind.clone())),
+                        &log.new(o!("object_kind" => object_kind.clone())),
                     );
 
                     // send message to irc
@@ -205,7 +207,9 @@ pub fn main() -> Result<(), String> {
 
     let addr = "127.0.0.1:7878";
     info!(log, "Listening for requests at http://{}", addr);
-    Ok(gotham::start(addr, router(log, cfg, Box::new(writer))))
+    gotham::start(addr, router(log, cfg, Box::new(writer)));
+
+    Ok(())
 }
 
 #[cfg(test)]
