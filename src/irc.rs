@@ -120,7 +120,7 @@ mod tests {
             String::from("#another-channel"),
         ];
 
-        let (channels, keys) = split_channel_keys(chans);
+        let (channels, keys) = split_channel_keys(&chans);
 
         assert_eq!(channels.len(), 3);
         assert_eq!(keys.len(), 1);

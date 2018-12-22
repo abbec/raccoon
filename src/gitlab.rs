@@ -370,7 +370,7 @@ mod tests {
         let tp = "push";
         let d = serde_json::from_reader(File::open("test/push.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
+        let s = dispatch(tp, d, &slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("pushed"));
@@ -383,7 +383,7 @@ mod tests {
         let d =
             serde_json::from_reader(File::open("test/push_tag.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
+        let s = dispatch(tp, d, &slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("pushed tag \"v1.0.0\""));
@@ -394,7 +394,7 @@ mod tests {
         let tp = "issue";
         let d = serde_json::from_reader(File::open("test/issue.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
+        let s = dispatch(tp, d, &slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("opened issue"));
@@ -406,7 +406,7 @@ mod tests {
         let d = serde_json::from_reader(File::open("test/comment_commit.json").expect("find file"))
             .unwrap();
 
-        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
+        let s = dispatch(tp, d, &slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("commented on"));
@@ -419,7 +419,7 @@ mod tests {
         let d = serde_json::from_reader(File::open("test/comment_mr.json").expect("find file"))
             .unwrap();
 
-        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
+        let s = dispatch(tp, d, &slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("commented on"));
@@ -432,7 +432,7 @@ mod tests {
         let d = serde_json::from_reader(File::open("test/comment_issue.json").expect("find file"))
             .unwrap();
 
-        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
+        let s = dispatch(tp, d, &slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("commented on"));
@@ -446,7 +446,7 @@ mod tests {
             serde_json::from_reader(File::open("test/comment_snippet.json").expect("find file"))
                 .unwrap();
 
-        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
+        let s = dispatch(tp, d, &slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
         assert!(s.contains("commented on"));
@@ -460,7 +460,7 @@ mod tests {
         let d = serde_json::from_reader(File::open("test/merge_request.json").expect("find file"))
             .unwrap();
 
-        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
+        let s = dispatch(tp, d, &slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
 
@@ -472,7 +472,7 @@ mod tests {
         let tp = "wiki_page";
         let d = serde_json::from_reader(File::open("test/wiki.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
+        let s = dispatch(tp, d, &slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
 
@@ -485,7 +485,7 @@ mod tests {
         let d =
             serde_json::from_reader(File::open("test/pipeline.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
+        let s = dispatch(tp, d, &slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
 
@@ -497,7 +497,7 @@ mod tests {
         let tp = "build";
         let d = serde_json::from_reader(File::open("test/build.json").expect("find file")).unwrap();
 
-        let s = dispatch(tp, d, slog::Logger::root(slog::Discard, o!()));
+        let s = dispatch(tp, d, &slog::Logger::root(slog::Discard, o!()));
         assert!(s.is_some());
         let s = s.unwrap();
 
