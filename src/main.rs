@@ -14,7 +14,7 @@ use gotham::router::Router;
 use gotham::state::{FromState, State};
 
 use gotham::handler::{HandlerFuture, IntoHandlerError};
-use gotham::helpers::http::response::create_empty_response;
+use gotham::helpers::http::response::{create_empty_response, create_response};
 use hyper::{Body, HeaderMap, StatusCode};
 
 use futures::{future::Future, stream::Stream};
@@ -23,6 +23,8 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
 };
+
+use serde_json::json;
 
 use slog::Drain;
 
@@ -107,14 +109,28 @@ fn handle_gitlab(mut state: State) -> Box<HandlerFuture> {
                     );
 
                     // send message to irc
-                    if let Some(m) = msg {
-                        debug!(log, "{}", m);
-                        if let Err(e) = app_state.irc.lock().unwrap().write(&m) {
-                            error!(log, "failed to post message to IRC: {}", e);
+                    match msg {
+                        Ok(m) => {
+                            debug!(log, "{}", m);
+                            if let Err(e) = app_state.irc.lock().unwrap().write(&m) {
+                                error!(log, "failed to post message to IRC: {}", e);
+                            }
                         }
-                    } else {
-                        let resp = create_empty_response(&state, StatusCode::BAD_REQUEST);
-                        return Ok((state, resp));
+                        Err(e) => {
+                            let resp = create_response(
+                                &state,
+                                StatusCode::BAD_REQUEST,
+                                mime::APPLICATION_JSON,
+                                json!({
+                                    "code": 400,
+                                    "error": {
+                                        "message": format!("Failed to parse Gitlab payload: {}", e)
+                                    }
+                                })
+                                .to_string(),
+                            );
+                            return Ok((state, resp));
+                        }
                     }
                 }
                 Err(e) => return Err((state, e.into_handler_error())),

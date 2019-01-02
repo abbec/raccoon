@@ -28,9 +28,19 @@ pub trait IrcWriter {
 
 impl IrcWriter for RealIrcWriter {
     fn write(&mut self, message: &str) -> Result<(), String> {
-        self.client
-            .send(message)
-            .map_err(|e| format!("failed to send IRC message: {}", e))
+        if let Some(channels) = self.client.list_channels() {
+            for chan in channels {
+                if let Err(e) = self
+                    .client
+                    .send_privmsg(&chan, message)
+                    .map_err(|e| format!("failed to send IRC message to channel {}: {}", &chan, e))
+                {
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -87,13 +97,41 @@ pub fn init(config: &config::Config, logger: &slog::Logger) -> Result<client::Ir
         let client = reactor
             .prepare_client_and_connect(&parsed.into())
             .map_err(|e| format!("failed to connect IRC client: {}", e))?;
-        tx.send(client.clone()).unwrap();
 
         client
             .identify()
             .map_err(|e| format!("failed to identify: {}", e))?;
 
-        reactor.register_client_with_handler(client.clone(), |_, _| Ok(()));
+        let msglog = log.new(o!());
+        reactor.register_client_with_handler(client.clone(), move |client, msg| {
+            let mut m = msg.to_string();
+            m.pop();
+            debug!(msglog, "{}", m);
+
+            match msg.command {
+                irc::proto::command::Command::Response(
+                    irc::proto::response::Response::RPL_WELCOME,
+                    _,
+                    _,
+                ) => {
+                    tx.send(client.clone()).unwrap();
+                }
+                irc::proto::command::Command::Response(
+                    irc::proto::response::Response::RPL_NAMREPLY,
+                    ref args,
+                    _,
+                ) => {
+                    if let Some(c) = args.iter().find(|x| x.starts_with('#')) {
+                        client.send_privmsg(
+                            c,
+                            "🦝 Hello! I am here to serve your Gitlab notifications!",
+                        )?;
+                    }
+                }
+                _ => (),
+            }
+            Ok(())
+        });
 
         info!(log, "starting IRC event loop");
         reactor
@@ -103,9 +141,11 @@ pub fn init(config: &config::Config, logger: &slog::Logger) -> Result<client::Ir
         Ok(())
     });
 
-    Ok(rx
+    let c = rx
         .recv()
-        .map_err(|e| format!("failed to recieve irc client: {}", e))?)
+        .map_err(|e| format!("failed to recieve irc client: {}", e))?;
+    info!(logger, "IRC client connected");
+    Ok(c)
 }
 
 #[cfg(test)]
