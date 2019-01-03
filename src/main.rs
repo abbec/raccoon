@@ -64,11 +64,14 @@ fn router(logger: slog::Logger, cfg: config::Config, irc: Box<irc::IrcWriter + S
 fn compare_gitlab_token(headers: &HeaderMap, app_state: &AppState) -> Result<(), String> {
     match headers.get("X-Gitlab-Token") {
         Some(gl_token) => {
-            let token: String = {
-                let cfg = app_state.cfg.read().unwrap();
-                cfg.get("gitlab.token")
-                    .map_err(|e| format!("no gitlab.token in cfg: {}", e))?
-            };
+            let token: String = app_state
+                .cfg
+                .read()
+                .map_err(|e| format!("failed to lock application config for reading: {}", e))
+                .and_then(|cfg| {
+                    cfg.get("gitlab.token")
+                        .map_err(|e| format!("no gitlab.token in cfg: {}", e))
+                })?;
 
             if &token == gl_token {
                 Ok(())
@@ -112,7 +115,12 @@ fn handle_gitlab(mut state: State) -> Box<HandlerFuture> {
                     match msg {
                         Ok(m) => {
                             debug!(log, "{}", m);
-                            if let Err(e) = app_state.irc.lock().unwrap().write(&m) {
+                            if let Err(e) = app_state
+                                .irc
+                                .lock()
+                                .map_err(|_| String::from("failed to obtain irc writer lock"))
+                                .and_then(|mut i| i.write(&m))
+                            {
                                 error!(log, "failed to post message to IRC: {}", e);
                             }
                         }
