@@ -166,6 +166,22 @@ struct Opt {
     /// file resolution. See man page for config file format and
     /// resolution order if this parameter is not specified.
     config: Option<PathBuf>,
+
+    #[structopt(short = "p", long = "port")]
+    /// Port to bind the service to, default is 7878.
+    /// Can also be set in the settings file with the setting `service.port`.
+    port: Option<u16>,
+
+    #[structopt(short = "b", long = "bind")]
+    /// Address to bind the service to, default is 127.0.0.1.
+    /// Can also be set in the settings file with the setting `service.bind`.
+    bind: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct ServiceConfig {
+    bind: String,
+    port: u16,
 }
 
 pub fn main() -> Result<(), String> {
@@ -229,7 +245,33 @@ pub fn main() -> Result<(), String> {
     info!(log, "connecting to IRC");
     let writer = irc::RealIrcWriter::new(irc::init(&cfg, &log)?);
 
-    let addr = "127.0.0.1:7878";
+    cfg.set_default("service.bind", "127.0.0.1".to_owned())
+        .map_err(|e| {
+            error!(
+                log,
+                "failed to set default value for service.bind setting: {}", e
+            );
+            e.to_string()
+        })?;
+    cfg.set_default("service.port", 7878).map_err(|e| {
+        error!(
+            log,
+            "failed to set default value for service.bind setting: {}", e
+        );
+        e.to_string()
+    })?;
+
+    let service_config: ServiceConfig = cfg.get("service").map_err(|e| {
+        error!(log, "failed to parse service settings: {}", e);
+        e.to_string()
+    })?;
+
+    let addr = format!(
+        "{}:{}",
+        opt.bind.unwrap_or(service_config.bind),
+        opt.port.unwrap_or(service_config.port)
+    );
+
     info!(log, "Listening for requests at http://{}", addr);
     gotham::start(addr, router(log, cfg, Box::new(writer)));
 
